@@ -1,5 +1,5 @@
 # Linking-Kart
-Welcome to Liking Kart, a fast-paced car racing game for the Game Boy Advance (GBA)! 🚦 
+Welcome to Linkin Kart, a fast-paced car racing game for the Game Boy Advance (GBA)! 🚦 
 
 About the Game
 Take the iconic Linking Car down the Boulevard of Broken Dream Road, dodge obstacles, master tight corners, and race through challenging tracks. Compete for glory, chase the fastest lap, and get ready to 'Lap Out Loud' in this retro-inspired adventure!
@@ -15,7 +15,7 @@ Boost & Drift: Strategically use boosts to gain an edge.
 Cross the Finish Line: Complete laps and aim for the fastest time!
 
 Getting Started
-Run the Game: Load LikingKart.gba on your favorite GBA emulator (e.g., VisualBoyAdvance or mGBA).
+Run the Game: Load LinkinKart.gba on your favorite GBA emulator (e.g., VisualBoyAdvance or mGBA).
 Controls:
 A: Accelerate
 B: Brake
