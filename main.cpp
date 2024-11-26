@@ -4,6 +4,11 @@
 #include "bn_regular_bg_ptr.h"
 #include "bn_sprite_ptr.h"
 
+//including our sprite cars
+#include "bn_sprite_items_straight_car.h"
+#include "bn_sprite_items_left_car.h"
+#include "bn_sprite_items_right_car.h"
+
 int main()
 {
     //initialization of our program, we want to make sure that all of our items and feats initialized after this point
@@ -13,7 +18,7 @@ int main()
     bn:: regular_bg_ptr track = bn::regular_bg_items::track_bg.create_bg(0,0);
 
     //loading the car sprite in
-    bn::sprite_ptr car = bn::sprite_items::car_sprite.create_sprite(0,64);
+    bn::sprite_ptr car = bn::sprite_items::straight_car_sprite.create_sprite(0,64);
 
     //PLACEHOLDER: loading in the obstacles
     //bn::sprite_ptr  = bn::sprite_items:: .create_sprite();
@@ -47,14 +52,22 @@ int main()
             //if left directional button is held, the car will move left but not offscreen
             if(bn::keypad::left_held() && car.x() > -120)
             {
+                //if left directional button is held, we switch to our left car sprite
                 //if the car is off road, then we also want to slow down the turning because of traction
+                car.set_item(bn::sprite_items::left_car);
                 car.set_x(car.x() - (is_off_road ? 0.5: 1)); 
             }
             //if right directional button is held, move car over to the right but not offscreen
-            if(bn::keypad::right_held() && car.x() < 120)
+            else if(bn::keypad::right_held() && car.x() < 120)
             {
+                //if right directional button is held, we switch to our right car sprite
                 //if the car is off road, then we also want to slow down the turning because of traction
+                car.set_item(bn::sprite_items::right_car);
                 car.set_x(car.x() + (is_off_road ? 0.5: 1));
+            }
+            if (!bn::keypad::left_held() && !bn::keypad::right_held())
+            {
+                car.set_item(bn::sprite_items::straight_car);
             }
         }
         else
