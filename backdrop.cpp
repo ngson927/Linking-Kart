@@ -9,148 +9,156 @@
 #include "bn_display.h"
 #include "bn_random.h"
 #include "bn_time.h"
+#include "bn_timer.h"
+#include "bn_timers.h"
+#include "bn_fixed.h"
+#include "bn_color.h"
+#include "bn_span.h"
+#include "bn_backdrop.h"
+#include <numbers>
 #include "bn_regular_bg_items_lap_out_loud.h"
-#include "bn_regular_bg_items_right_turn.h"
-#include "bn_regular_bg_items_left_turn.h"
 #include "bn_sprite_items_paddle.h"
 #include "bn_sprite_text_generator.h"
 #include "bn_sprite_animate_actions.h"
 #include "bn_sprite_palette_ptr.h"
 #include "common_variable_8x8_sprite_font.h"
+#include "bn_regular_bg_tiles_item.h"
+#include "bn_regular_bg_tiles_ptr.h"
+#include "bn_bg_tiles.h"
+#include "bn_tile.h"
+#include "bn_regular_bg_map_ptr.h"
+#include "bn_regular_bg_map_cell_info.h"
+#include "bn_cameras.h"
+#include "bn_camera_ptr.h"
+#include "bn_camera_actions.h"
+#include "bn_blending.h"
+#include "bn_rect_window.h"
+#include "bn_rect.h"
+#include "bn_seed_random.h"
+#include "bn_fixed_point_fwd.h"
+#include "bn_sprite_shape_size.h"
+#include <vector>
 
 int main() {
     bn::core::init();
 
-    bn::regular_bg_ptr backdrop_image = bn::regular_bg_items::backdrop_image.create_bg(0, 0);
+    // Create a random number generator object
+    bn::random random;
 
-    bn::sprite_ptr paddle = bn::sprite_items::paddle.create_sprite(100, 100);
+    // Create a camera to follow the car
+    bn::camera_ptr camera = bn::camera_ptr::create(0, 0);
 
-    bn::regular_bg_ptr right_turn = bn::regular_bg_items::right_turn.create_bg(0, 0);
+    bn::sprite_ptr paddle = bn::sprite_items::paddle.create_sprite(-100, 40);
 
-    bn::regular_bg_ptr left_turn = bn::regular_bg_items::left_turn.create_bg(0, 0);
+    float top_boundary = 11;
+    float bottom_boundary = 70;
 
-    bn::regular_bg_ptr lap_out_loud = bn::regular_bg_items::lap_out_loud.create_bg(0, 0);
-
+    //Countdown timer setup
     bn::sprite_text_generator text_generator(common::variable_8x8_sprite_font);
-
     bn::vector<bn::sprite_ptr, 16> text_sprites;
+    int countdown_seconds = 0.5 * 60;
+    bool game_over = false;  //Flag to check if the game is over
 
-    // Create a bn::time object for the countdown timer (1 minute 15 seconds)
-    bn::time countdown_time(0, 1, 15); // 1 minute 15 seconds
+    bn::timer timer;
+    uint64_t ticks = 0;
+    int frame_counter = 0; // Counter to track frames for slowing down the timer
 
-    // Initial position and speed for the paddle's downward movement
-    float paddle_speed = 1;  // Speed at which the paddle moves down
-    float car_x = 0;  // Starting x-position of the paddle
-    float car_y = 80;  // Starting y-position (middle of the screen)
+    //Declaring the items for the background
+    bn::regular_bg_ptr backdrop_image = bn::regular_bg_items::backdrop_image.create_bg(0, 0);
+    bn::regular_bg_ptr lap_out_loud = bn::regular_bg_items::lap_out_loud.create_bg(0, 1);
 
-    bool moving_up = false;  // Flag to indicate if the paddle is moving down or up
+    // Variable for a single obstacle
+    bn::sprite_ptr obstacle = bn::sprite_items::paddle.create_sprite(0, 0);
 
-    // Boundaries for horizontal movement
-    const float LEFT_BOUNDARY = -120;  // Left boundary of the screen
-    const float RIGHT_BOUNDARY = 120;  // Right boundary of the screen
+    // Initial obstacle setup
+    int obstacle_x = random.get_int(-100, 100);  // Starting position on the right side of the screen
+    int obstacle_y = random.get_int(top_boundary, bottom_boundary);
+    obstacle = bn::sprite_items::paddle.create_sprite(obstacle_x, obstacle_y);  // You can use different obstacle sprite here
 
-    //toying with the boundaries for off roading later
-    float road_left_boundary = -20;
-    float road_right_boundary = 20;
+    // Waiting for 'a' to start the game
+    while (!bn::keypad::a_pressed()) {
+        bn::core::update();  // Keep updating the core to handle input, etc.
+        // You can display a message or some kind of visual cue that says "Press A to Start"
+        bn::string<16> start_text = "Press A to Start";
+        text_sprites.clear();
+        text_generator.generate(-30, 0, start_text, text_sprites);  // Display at a position
+    }
 
-    // Variable to track car's speed (will slow down when off-road)
-    float speed = paddle_speed;
-
-    // Countdown timer setup
-    bool game_over = false;  // Flag to check if the game is over
-
-    while(true) {
+    while (true) {
         bn::core::update();
 
-        // If the game is over, do not update the timer
-        if (!game_over) {
-            // Decrease the time by 1 second
-            int current_seconds = countdown_time.second();
-            int current_minutes = countdown_time.minute();
+        // Update ticks based on elapsed time
+        ticks += timer.elapsed_ticks_with_restart();
 
-            if (current_seconds > 0) {
-                // If there are seconds left, just decrease the seconds
-                countdown_time.set_second(current_seconds - 1);
-            } else if (current_minutes > 0) {
-                // If seconds reach 0, reset seconds to 59 and decrease the minute
-                countdown_time.set_second(59);
-                countdown_time.set_minute(current_minutes - 1);
-            } else {
-                // If no time is left, set the game over flag
-                countdown_time.set_minute(0);
-                countdown_time.set_second(0);
-                game_over = true;
+        // Slow down the countdown timer by updating it every 60 frames
+        frame_counter++;
+        if (frame_counter >= 60) { // 60 frames = roughly 1 second
+            frame_counter = 0;
+            if (!game_over && countdown_seconds > 0) {
+                countdown_seconds--;
+            } else if (!game_over) {
+                game_over = true;  // Trigger game over when the timer hits 0
             }
-            // Manually convert the minutes and seconds to characters
-            int minutes = countdown_time.minute();
-            int seconds = countdown_time.second();
-
-            // Create the timer text manually as "MM:SS"
-            char timer_text_buffer[6]; // Buffer to hold "MM:SS" string
-            timer_text_buffer[0] = '0' + minutes / 10; // Tens place of minutes
-            timer_text_buffer[1] = '0' + minutes % 10; // Ones place of minutes
-            timer_text_buffer[2] = ':';                  // Colon separator
-            timer_text_buffer[3] = '0' + seconds / 10;   // Tens place of seconds
-            timer_text_buffer[4] = '0' + seconds % 10;   // Ones place of seconds
-            timer_text_buffer[5] = '\0';                  // Null-terminate the string
-
-            text_sprites.clear(); // Clear the sprite vector
-
-            // Update the timer text display
-            text_generator.generate(-6 * 16, -68, timer_text_buffer, text_sprites);  // Position at the top-left corner
         }
+
+        // Convert countdown_seconds to minutes and seconds
+        int minutes = countdown_seconds / 60;
+        int seconds_left = countdown_seconds % 60;
+
+        // Update the countdown timer text display
+        bn::string<6> timer_text = bn::to_string<6>(minutes) + ":" + bn::to_string<6>(seconds_left);
+        text_sprites.clear();
+        text_generator.generate(-6 * 16, -68, timer_text, text_sprites);  // Position at the top-left corner
 
         // If the game is over, display "Game Over" and stop the car's movement
         if (game_over) {
-            // Clear the previous "Game Over" text sprites
             text_sprites.clear(); // Clear the vector, removing the references to old sprites
-            // Set the position of the "Game Over" text
-            text_generator.generate(-6 * 16, -50, "Game Over", text_sprites);  // Display it below the timer
-            continue;
+            text_generator.generate(-30, 0, "Game Over", text_sprites);  // Display it below the timer
+            continue;  // Skip the rest of the loop
         }
 
-        bool is_off_road = (car_x < road_left_boundary || car_x > road_right_boundary);
+        // For the paddle and obstacle, use the position and shape size to create a rect.
+        bn::rect paddle_rect(int(paddle.x()), int(paddle.y()), paddle.shape_size().width(), paddle.shape_size().height());
+        bn::rect obstacle_rect(int(obstacle.x()), int(obstacle.y()), obstacle.shape_size().width(), obstacle.shape_size().height());
 
-        // If the car is off-road, slow it down
-        if (is_off_road) {
-            speed = paddle_speed * 0.5;  // Reduce speed to 50% of normal speed
-        } else {
-            speed = paddle_speed;  // Restore normal speed
+        // If the paddle is touching the obstacle, end the game
+        if (paddle_rect.touches(obstacle_rect)) {
+            game_over = true;  // Set the game over flag
         }
 
-        // If 'a' is pressed, move the car up
-        if (bn::keypad::a_held() && !game_over) {
-            moving_up = true;  // Start moving up
-        } else {
-            moving_up = false;  // Stop moving up if 'a' is not pressed
+        // Move the obstacle to the left
+        obstacle.set_x(obstacle.x() - 1);  // Move the obstacle left by 1 pixel
+
+        // If the obstacle goes off-screen to the left, generate a new one on the right side
+        if (obstacle.x() < -110) {  // If the obstacle goes completely off the left side
+            obstacle.set_x(100);  // Reset it to the right side of the screen
+            obstacle.set_y(random.get_int(top_boundary, bottom_boundary));  // Set a new random y position
         }
 
-        // If 'a' is pressed, move the car upwards
-        if (moving_up && !game_over) {
-            car_y -= speed;  // Move up
-            if (car_y <= 0) {
-                car_y = 0;
+        backdrop_image.set_camera(camera);
+        lap_out_loud.set_camera(camera);
+        if (bn::keypad::a_held()) {
+            camera.set_x(camera.x() + 5);
+            if (paddle.x() > 80) {
+                paddle.set_x(80);
+            } else {
+                paddle.set_x(paddle.x() + 0.1);
             }
-        } 
-        // If 'a' is not pressed, move the car back down to the bottom
-        else if (!game_over) {
-            car_y += speed;  // Move down
-            if (car_y >= 70) {
-                car_y = 70;  // Stop at the bottom (80 is the middle position)
+            if (bn::keypad::up_held()) {
+                if (paddle.y() > top_boundary) {
+                    paddle.set_y(paddle.y() - 1);
+                } else {
+                    paddle.set_y(11);
+                }
+            }
+            if (bn::keypad::down_held()) {
+                if (paddle.y() < bottom_boundary) {
+                    paddle.set_y(paddle.y() + 1);
+                } else {
+                    paddle.set_y(70);
+                }
             }
         }
-
-        // Handle left and right movements with keypad input
-        if (bn::keypad::right_held() && car_x < RIGHT_BOUNDARY && !game_over) {
-            car_x += 1;  // Move to the right
-        }
-        if (bn::keypad::left_held() && car_x > LEFT_BOUNDARY && !game_over) {
-            car_x -= 1;  // Move to the left
-        }
-
-        // Set the new position of the paddle (car)
-        paddle.set_position(car_x, car_y);
     }
-
     return 0;
 }
