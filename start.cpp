@@ -1,15 +1,23 @@
+// Libraries
 #include "bn_core.h"
-#include "bn_bg_palettes.h"
 #include "bn_keypad.h"
 #include "bn_sprite_ptr.h"
+#include "bn_regular_bg_ptr.h"
+#include "bn_optional.h"
+
+// Backgrounds
+#include "bn_regular_bg_items_blue_bg.h"
+#include "bn_regular_bg_items_lvlslct_bg.h"
+#include "bn_regular_bg_items_instructions_bg.h"
+
+// Sprites
 #include "bn_sprite_items_start_button.h"
 #include "bn_sprite_items_how_to_play_button.h"
-#include "bn_sprite_items_cursor.h"
 #include "bn_sprite_items_level_1_button.h"
-#include "bn_sprite_items_how_to_play_title.h"
 #include "bn_sprite_items_back_button.h"
+#include "bn_sprite_items_cursor.h"
 
-// screen states to track which screen we're currently displaying
+// Enum for different screen states
 enum class ScreenState
 {
     START,
@@ -17,100 +25,72 @@ enum class ScreenState
     INSTRUCTIONS
 };
 
-// screen updates and transitioning with fade effect
-void update_start_screen(ScreenState& current_state);
-void update_level_select_screen(ScreenState& current_state);
-void update_instructions_screen(ScreenState& current_state);
-void fade_to_black();
+// Global variables
+static bn::optional<bn::regular_bg_ptr> current_background;
+static ScreenState last_screen = ScreenState::START;
 
-// initializes core and handles screen transitions
-int main()
+// Function to load a new background
+void load_background(const bn::regular_bg_item& bg_item, ScreenState new_screen)
 {
-    bn::core::init();
-
-    ScreenState current_state = ScreenState::START; // start screen as initial state
-
-    while(true)
+    if (!current_background || last_screen != new_screen)
     {
-        switch (current_state) //current screen based on the state
+        if (current_background)
         {
-            case ScreenState::START:
-                update_start_screen(current_state);
-                break;
-
-            case ScreenState::LEVEL_SELECT:
-                update_level_select_screen(current_state);
-                break;
-
-            case ScreenState::INSTRUCTIONS:
-                update_instructions_screen(current_state);
-                break;
-
-            default:
-                current_state = ScreenState::START;
-                break;
+            current_background.reset(); // Remove the previous background
         }
-
-        bn::core::update();
+        current_background = bg_item.create_bg(0, 0);
+        last_screen = new_screen; // Update the last screen to the new one
     }
 }
 
-// function to transition to black screen for smooth state changes
-void fade_to_black()
-{
-    for(float fade_level = 0.0f; fade_level <= 1.0f; fade_level += 0.05f)
-    {
-        bn::bg_palettes::set_fade(bn::color(0, 0, 0), fade_level);
-        bn::core::update();
-    }
-}
-
-// update Start Screen
+// Function to update the Start screen
 void update_start_screen(ScreenState& current_state)
 {
-    // create static sprites for buttons and cursor
-    static bn::sprite_ptr start_button = bn::sprite_items::start_button.create_sprite(0, -20);
-    static bn::sprite_ptr how_to_play_button = bn::sprite_items::how_to_play_button.create_sprite(0, 20);
-    static bn::sprite_ptr cursor = bn::sprite_items::cursor.create_sprite(-40, -20);
+    load_background(bn::regular_bg_items::blue_bg, ScreenState::START);
+
+    // Sprites for the Start screen
+    static bn::sprite_ptr start_button = bn::sprite_items::start_button.create_sprite(0, 52);
+    static bn::sprite_ptr how_to_play_button = bn::sprite_items::how_to_play_button.create_sprite(0, 65);
+    static bn::sprite_ptr cursor = bn::sprite_items::cursor.create_sprite(-40, 52);
 
     start_button.set_visible(true);
     how_to_play_button.set_visible(true);
     cursor.set_visible(true);
 
-    // move cursor between Start and How to Play based on user input
-    if (bn::keypad::down_pressed() && cursor.y() == -20)  // move cursor to 'How to Play'
+    // Move the cursor between buttons
+    if (bn::keypad::down_pressed() && cursor.y() == 52)
     {
-        cursor.set_position(-40, 20);
+        cursor.set_position(-40, 65);
     }
-    else if (bn::keypad::up_pressed() && cursor.y() == 20)  // move cursor back to 'Start'
+    else if (bn::keypad::up_pressed() && cursor.y() == 65)
     {
-        cursor.set_position(-40, -20);
+        cursor.set_position(-40, 52);
     }
 
+    // Handle 'A' button press
     if (bn::keypad::a_pressed())
     {
-        fade_to_black();
-
-        // hide sprites before switching state
         start_button.set_visible(false);
         how_to_play_button.set_visible(false);
         cursor.set_visible(false);
 
-        if (cursor.y() == -20)  // Start button selected
+        if (cursor.y() == 52) // Start button selected
         {
             current_state = ScreenState::LEVEL_SELECT;
         }
-        else if (cursor.y() == 20)  // How to Play selected
+        else if (cursor.y() == 65) // How to Play button selected
         {
             current_state = ScreenState::INSTRUCTIONS;
         }
     }
 }
 
-// update Level Select Screen
+// Function to update the Level Select screen
 void update_level_select_screen(ScreenState& current_state)
 {
-    // create static sprites for buttons and cursor
+    load_background(bn::regular_bg_items::lvlslct_bg, ScreenState::LEVEL_SELECT);
+
+    // Sprites for the Level Select screen
     static bn::sprite_ptr level_1_button = bn::sprite_items::level_1_button.create_sprite(0, 0);
     static bn::sprite_ptr back_button = bn::sprite_items::back_button.create_sprite(0, 40);
     static bn::sprite_ptr cursor = bn::sprite_items::cursor.create_sprite(-40, 0);
@@ -119,58 +99,79 @@ void update_level_select_screen(ScreenState& current_state)
     back_button.set_visible(true);
     cursor.set_visible(true);
 
-    // move cursor between Back and Level 1 based on user input
-    if (bn::keypad::down_pressed() && cursor.y() == 0)  // move cursor to 'Back'
+    // Move the cursor between buttons
+    if (bn::keypad::down_pressed() && cursor.y() == 0)
     {
         cursor.set_position(-40, 40);
     }
-    else if (bn::keypad::up_pressed() && cursor.y() == 40)  // move cursor to 'Level 1'
+    else if (bn::keypad::up_pressed() && cursor.y() == 40)
     {
         cursor.set_position(-40, 0);
     }
 
+    // Handle 'A' button press
     if (bn::keypad::a_pressed())
     {
-        fade_to_black();
-
-        // hide sprites before switching state
         level_1_button.set_visible(false);
         back_button.set_visible(false);
         cursor.set_visible(false);
 
-        if (cursor.y() == 40)  // Back button selected
+        if (cursor.y() == 40) // Back button selected
         {
             current_state = ScreenState::START;
         }
-        else if (cursor.y() == 0)  // Level 1 selected
-        {
-            // Logic to start Level 1 when added
-        }
     }
 }
 
-// update Instructions Screen
+// Function to update the Instructions screen
 void update_instructions_screen(ScreenState& current_state)
 {
-    // create static sprites for buttons and cursor
-    static bn::sprite_ptr how_to_play_title = bn::sprite_items::how_to_play_title.create_sprite(0, -40);
+    load_background(bn::regular_bg_items::instructions_bg, ScreenState::INSTRUCTIONS);
+
+    // Sprites for the Instructions screen
     static bn::sprite_ptr back_button = bn::sprite_items::back_button.create_sprite(0, 40);
     static bn::sprite_ptr cursor = bn::sprite_items::cursor.create_sprite(-40, 40);
 
-    how_to_play_title.set_visible(true);
     back_button.set_visible(true);
     cursor.set_visible(true);
 
-    // move cursor between Back and Level 1 based on user input
-    if (bn::keypad::a_pressed() && cursor.y() == 40)  // Back button selected
+    // Handle 'A' button press
+    if (bn::keypad::a_pressed() && cursor.y() == 40) // Back button selected
     {
-        fade_to_black();
-
-        // hide sprites before switching state
-        how_to_play_title.set_visible(false);
         back_button.set_visible(false);
         cursor.set_visible(false);
 
-        current_state = ScreenState::START; // return to start screen
+        current_state = ScreenState::START;
     }
 }
+
+// Main function
+int main()
+{
+    bn::core::init();
+
+    ScreenState current_state = ScreenState::START;
+
+    while (true)
+    {
+        switch (current_state)
+        {
+        case ScreenState::START:
+            update_start_screen(current_state);
+            break;
+        case ScreenState::LEVEL_SELECT:
+            update_level_select_screen(current_state);
+            break;
+        case ScreenState::INSTRUCTIONS:
+            update_instructions_screen(current_state);
+            break;
+        default:
+            // Handle unexpected state (optional, could log an error or reset to START)
+            current_state = ScreenState::START;
+            break;
+        }
+
+        bn::core::update();
+    }
+}
+
