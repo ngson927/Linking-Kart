@@ -18,6 +18,12 @@
 #include <numbers>
 #include "bn_regular_bg_items_lap_out_loud.h"
 #include "bn_sprite_items_paddle.h"
+#include "bn_sprite_items_explosion.h"
+#include "bn_sprite_items_oil_spill.h"
+#include "bn_sprite_items_barrel.h"
+#include "bn_sprite_items_linkin_kart.h"
+#include "bn_sprite_items_gas.h"
+#include "bn_sprite_items_empty.h"
 #include "bn_sprite_text_generator.h"
 #include "bn_sprite_animate_actions.h"
 #include "bn_sprite_palette_ptr.h"
@@ -38,6 +44,33 @@
 #include "bn_fixed_point_fwd.h"
 #include "bn_sprite_shape_size.h"
 #include <vector>
+#include "bn_music.h"
+#include "bn_music_actions.h"
+#include "bn_music_items.h"
+#include "bn_sound_items.h"
+
+enum ObstacleType {
+    GAS_CAN,
+    OIL_SPILL,
+    NORMAL_OBSTACLE
+};
+
+struct Obstacle {
+    bn::sprite_ptr sprite;
+    ObstacleType type;
+
+    // Default constructor for array initialization
+    Obstacle() : sprite(bn::sprite_items::empty.create_sprite(-1024, 0)), type(NORMAL_OBSTACLE) {}
+
+    // Explicit constructor to initialize the obstacle
+    Obstacle(bn::sprite_ptr new_sprite, ObstacleType new_type)
+        : sprite(new_sprite), type(new_type) {}
+
+    bool operator==(const Obstacle& other) const {
+        return sprite == other.sprite && type == other.type;
+    }
+
+};
 
 int main() {
     bn::core::init();
@@ -48,10 +81,10 @@ int main() {
     // Create a camera to follow the car
     bn::camera_ptr camera = bn::camera_ptr::create(0, 0);
 
-    bn::sprite_ptr paddle = bn::sprite_items::paddle.create_sprite(-100, 40);
+    bn::sprite_ptr linkin_kart = bn::sprite_items::linkin_kart.create_sprite(-100, 40);
 
-    float top_boundary = 11;
-    float bottom_boundary = 70;
+    float top_boundary = 30;
+    float bottom_boundary = 68;
 
     //Countdown timer setup
     bn::sprite_text_generator text_generator(common::variable_8x8_sprite_font);
@@ -65,15 +98,18 @@ int main() {
 
     //Declaring the items for the background
     bn::regular_bg_ptr backdrop_image = bn::regular_bg_items::backdrop_image.create_bg(0, 0);
-    bn::regular_bg_ptr lap_out_loud = bn::regular_bg_items::lap_out_loud.create_bg(0, 1);
+    bn::regular_bg_ptr lap_out_loud = bn::regular_bg_items::lap_out_loud.create_bg(-622, 0);
 
-    // Variable for a single obstacle
-    bn::sprite_ptr obstacle = bn::sprite_items::paddle.create_sprite(0, 0);
+    // Variables to control obstacles
+    const size_t max_obstacles = 3;  // We only have 3 obstacles
+    Obstacle obstacles[max_obstacles];
+    int num_obstacles = 0;  // Current number of obstacles
+    int obstacle_spawn_frequency = 300;  // New obstacles spawn every 60 frames (1 second)
+    int spawn_counter = 0;
 
-    // Initial obstacle setup
-    int obstacle_x = random.get_int(-100, 100);  // Starting position on the right side of the screen
-    int obstacle_y = random.get_int(top_boundary, bottom_boundary);
-    obstacle = bn::sprite_items::paddle.create_sprite(obstacle_x, obstacle_y);  // You can use different obstacle sprite here
+    // Variables for car speed
+    bn::timer speed_timer;
+    bool speed_up = false;
 
     // Waiting for 'a' to start the game
     while (!bn::keypad::a_pressed()) {
@@ -117,45 +153,96 @@ int main() {
             continue;  // Skip the rest of the loop
         }
 
-        // For the paddle and obstacle, use the position and shape size to create a rect.
-        bn::rect paddle_rect(int(paddle.x()), int(paddle.y()), paddle.shape_size().width(), paddle.shape_size().height());
-        bn::rect obstacle_rect(int(obstacle.x()), int(obstacle.y()), obstacle.shape_size().width(), obstacle.shape_size().height());
-
-        // If the paddle is touching the obstacle, end the game
-        if (paddle_rect.touches(obstacle_rect)) {
-            game_over = true;  // Set the game over flag
+        // Update car speed based on active powerups
+        if (speed_up && speed_timer.elapsed_ticks() < 5 * 60) {
+            linkin_kart.set_x(linkin_kart.x() + 1.0);;  // Speed up for 5 seconds
+        } else {
+            speed_up = false;  // Reset speed up state after 5 seconds
         }
 
-        // Move the obstacle to the left
-        obstacle.set_x(obstacle.x() - 1);  // Move the obstacle left by 1 pixel
+        // Randomly generate obstacles
+        if (spawn_counter >= obstacle_spawn_frequency && static_cast<size_t>(num_obstacles) < max_obstacles) {
+            spawn_counter = 0;
+            ObstacleType type = static_cast<ObstacleType>(random.get_int(0, 2));  // Randomly choose between the three obstacle types
+            do {
+                type = static_cast<ObstacleType>(random.get_int(0, 2));  // Randomly choose between the three obstacle types
+            } while (num_obstacles > 1 && obstacles[num_obstacles - 1].type == type);  // Prevent repeating the last type
 
-        // If the obstacle goes off-screen to the left, generate a new one on the right side
-        if (obstacle.x() < -110) {  // If the obstacle goes completely off the left side
-            obstacle.set_x(100);  // Reset it to the right side of the screen
-            obstacle.set_y(random.get_int(top_boundary, bottom_boundary));  // Set a new random y position
+            int x_position = 100;  // Starting position on the right side
+            int y_position = random.get_int(top_boundary, bottom_boundary);  // Random y position
+
+            if (type == GAS_CAN) {
+                obstacles[num_obstacles] = Obstacle(bn::sprite_items::gas.create_sprite(x_position, y_position), GAS_CAN);  // Use gas can sprite here
+            } else if (type == OIL_SPILL) {
+                obstacles[num_obstacles] = Obstacle(bn::sprite_items::oil_spill.create_sprite(x_position, y_position), OIL_SPILL);  // Use oil spill sprite here
+            } else {
+                obstacles[num_obstacles] = Obstacle(bn::sprite_items::barrel.create_sprite(x_position, y_position), NORMAL_OBSTACLE);  // Use normal obstacle sprite here
+            }
+            num_obstacles++;  // Increase the count of obstacles
+        } else {
+            spawn_counter++;
+        }
+
+        // Move and check obstacles
+        for (int i = 0; i < num_obstacles; ++i) {
+            // Move obstacles left, independent of car's position
+            obstacles[i].sprite.set_x(obstacles[i].sprite.x() - 1);  // Move the obstacle left
+
+            // If the obstacle goes off-screen to the left, reset it to the right
+            if (obstacles[i].sprite.x() < -110) {
+                obstacles[i].sprite.set_x(100);  // Reset x position
+                obstacles[i].sprite.set_y(random.get_int(top_boundary, bottom_boundary));  // Set new y position
+            }
+
+            // Check for interaction with the car (collision detection)
+            bn::rect car_rect(int(linkin_kart.x()), int(linkin_kart.y()), linkin_kart.shape_size().width(), linkin_kart.shape_size().height());
+            bn::rect obstacle_rect(int(obstacles[i].sprite.x()), int(obstacles[i].sprite.y()), obstacles[i].sprite.shape_size().width(), obstacles[i].sprite.shape_size().height());
+
+            if (car_rect.intersects(obstacle_rect)) {
+                // Handle collision with the car
+                if (obstacles[i].type == GAS_CAN) {
+                    speed_up = true;
+                    speed_timer.restart();
+                    obstacles[i].sprite.set_visible(false);
+                } else if (obstacles[i].type == OIL_SPILL) {
+                    linkin_kart.set_x(linkin_kart.x() + 0.05);;  // Slow down the car when hitting oil spill
+                    obstacles[i].sprite.set_visible(false);
+                } else if (obstacles[i].type == NORMAL_OBSTACLE) {
+                    bn::sound_items::collision_new.play();
+                    game_over = true;  // End the game if the car hits a normal obstacle
+                }
+                /*
+                // Shift the remaining obstacles left in the array
+                for (int j = i; j < num_obstacles - 1; ++j) {
+                    obstacles[j] = obstacles[j + 1];
+                }
+                --num_obstacles;  // Decrease the number of obstacles
+                continue;  // Skip the rest of the loop and check the next obstacle
+                */
+            }
         }
 
         backdrop_image.set_camera(camera);
         lap_out_loud.set_camera(camera);
         if (bn::keypad::a_held()) {
             camera.set_x(camera.x() + 5);
-            if (paddle.x() > 80) {
-                paddle.set_x(80);
+            if (linkin_kart.x() > 80) {
+                linkin_kart.set_x(80);
             } else {
-                paddle.set_x(paddle.x() + 0.1);
+                linkin_kart.set_x(linkin_kart.x() + 0.1);
             }
             if (bn::keypad::up_held()) {
-                if (paddle.y() > top_boundary) {
-                    paddle.set_y(paddle.y() - 1);
+                if (linkin_kart.y() > top_boundary) {
+                    linkin_kart.set_y(linkin_kart.y() - 1);
                 } else {
-                    paddle.set_y(11);
+                    linkin_kart.set_y(30);
                 }
             }
             if (bn::keypad::down_held()) {
-                if (paddle.y() < bottom_boundary) {
-                    paddle.set_y(paddle.y() + 1);
+                if (linkin_kart.y() < bottom_boundary) {
+                    linkin_kart.set_y(linkin_kart.y() + 1);
                 } else {
-                    paddle.set_y(70);
+                    linkin_kart.set_y(68);
                 }
             }
         }
