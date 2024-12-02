@@ -1,0 +1,10 @@
+{
+    "type": "sprite",
+    "tiles": {
+        "compression": "none"
+    },
+    "palette": {
+        "bpp": 4,
+        "compression": "none"
+    }
+}
