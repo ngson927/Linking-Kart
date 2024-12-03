@@ -17,7 +17,6 @@
 #include "bn_backdrop.h"
 #include <numbers>
 #include "bn_regular_bg_items_lap_out_loud.h"
-#include "bn_sprite_items_paddle.h"
 #include "bn_sprite_items_explosion.h"
 #include "bn_sprite_items_oil_spill.h"
 #include "bn_sprite_items_barrel.h"
@@ -69,11 +68,12 @@ struct Obstacle {
     bool operator==(const Obstacle& other) const {
         return sprite == other.sprite && type == other.type;
     }
-
 };
 
 int main() {
     bn::core::init();
+
+    bn::music_items::save_the_beach.play(0.1);
 
     // Create a random number generator object
     bn::random random;
@@ -84,12 +84,15 @@ int main() {
     bn::sprite_ptr linkin_kart = bn::sprite_items::linkin_kart.create_sprite(-100, 40);
 
     float top_boundary = 30;
-    float bottom_boundary = 68;
+    float bottom_boundary = 66;
 
     //Countdown timer setup
     bn::sprite_text_generator text_generator(common::variable_8x8_sprite_font);
     bn::vector<bn::sprite_ptr, 16> text_sprites;
-    int countdown_seconds = 0.5 * 60;
+    int elapsed_time = 0;  // Counting up time in seconds
+    int display_best_score = 0;
+    bn::sram::read(display_best_score);
+    int best_time = display_best_score; // Store the best (maximum) time achieved
     bool game_over = false;  //Flag to check if the game is over
 
     bn::timer timer;
@@ -104,12 +107,20 @@ int main() {
     const size_t max_obstacles = 3;  // We only have 3 obstacles
     Obstacle obstacles[max_obstacles];
     int num_obstacles = 0;  // Current number of obstacles
-    int obstacle_spawn_frequency = 300;  // New obstacles spawn every 60 frames (1 second)
-    int spawn_counter = 0;
+
+    // Frequency control for each type of obstacle (Barrel, Gas Can, Oil Spill)
+    int barrel_spawn_frequency = 100;  // Barrels spawn every 100 frames
+    int gas_spawn_frequency = 200;  // Gas cans spawn every 200 frames
+    int oil_spawn_frequency = 150;  // Oil spills spawn every 200 frames
+    int barrel_counter = 0;
+    int gas_counter = 0;
+    int oil_counter = 0;
 
     // Variables for car speed
     bn::timer speed_timer;
+    bn::timer slow_timer;
     bool speed_up = false;
+    bool slow_down = false;
 
     // Waiting for 'a' to start the game
     while (!bn::keypad::a_pressed()) {
@@ -117,133 +128,182 @@ int main() {
         // You can display a message or some kind of visual cue that says "Press A to Start"
         bn::string<16> start_text = "Press A to Start";
         text_sprites.clear();
-        text_generator.generate(-30, 0, start_text, text_sprites);  // Display at a position
+        text_generator.generate(-58, -50, start_text, text_sprites);  // Display at a position
     }
 
     while (true) {
         bn::core::update();
 
-        // Update ticks based on elapsed time
-        ticks += timer.elapsed_ticks_with_restart();
-
-        // Slow down the countdown timer by updating it every 60 frames
-        frame_counter++;
-        if (frame_counter >= 60) { // 60 frames = roughly 1 second
-            frame_counter = 0;
-            if (!game_over && countdown_seconds > 0) {
-                countdown_seconds--;
-            } else if (!game_over) {
-                game_over = true;  // Trigger game over when the timer hits 0
-            }
-        }
-
-        // Convert countdown_seconds to minutes and seconds
-        int minutes = countdown_seconds / 60;
-        int seconds_left = countdown_seconds % 60;
-
-        // Update the countdown timer text display
-        bn::string<6> timer_text = bn::to_string<6>(minutes) + ":" + bn::to_string<6>(seconds_left);
-        text_sprites.clear();
-        text_generator.generate(-6 * 16, -68, timer_text, text_sprites);  // Position at the top-left corner
-
-        // If the game is over, display "Game Over" and stop the car's movement
-        if (game_over) {
-            text_sprites.clear(); // Clear the vector, removing the references to old sprites
-            text_generator.generate(-30, 0, "Game Over", text_sprites);  // Display it below the timer
-            continue;  // Skip the rest of the loop
-        }
-
-        // Update car speed based on active powerups
-        if (speed_up && speed_timer.elapsed_ticks() < 5 * 60) {
-            linkin_kart.set_x(linkin_kart.x() + 1.0);;  // Speed up for 5 seconds
-        } else {
-            speed_up = false;  // Reset speed up state after 5 seconds
-        }
-
-        // Randomly generate obstacles
-        if (spawn_counter >= obstacle_spawn_frequency && static_cast<size_t>(num_obstacles) < max_obstacles) {
-            spawn_counter = 0;
-            ObstacleType type = static_cast<ObstacleType>(random.get_int(0, 2));  // Randomly choose between the three obstacle types
-            do {
-                type = static_cast<ObstacleType>(random.get_int(0, 2));  // Randomly choose between the three obstacle types
-            } while (num_obstacles > 1 && obstacles[num_obstacles - 1].type == type);  // Prevent repeating the last type
-
-            int x_position = 100;  // Starting position on the right side
-            int y_position = random.get_int(top_boundary, bottom_boundary);  // Random y position
-
-            if (type == GAS_CAN) {
-                obstacles[num_obstacles] = Obstacle(bn::sprite_items::gas.create_sprite(x_position, y_position), GAS_CAN);  // Use gas can sprite here
-            } else if (type == OIL_SPILL) {
-                obstacles[num_obstacles] = Obstacle(bn::sprite_items::oil_spill.create_sprite(x_position, y_position), OIL_SPILL);  // Use oil spill sprite here
-            } else {
-                obstacles[num_obstacles] = Obstacle(bn::sprite_items::barrel.create_sprite(x_position, y_position), NORMAL_OBSTACLE);  // Use normal obstacle sprite here
-            }
-            num_obstacles++;  // Increase the count of obstacles
-        } else {
-            spawn_counter++;
-        }
-
-        // Move and check obstacles
-        for (int i = 0; i < num_obstacles; ++i) {
-            // Move obstacles left, independent of car's position
-            obstacles[i].sprite.set_x(obstacles[i].sprite.x() - 1);  // Move the obstacle left
-
-            // If the obstacle goes off-screen to the left, reset it to the right
-            if (obstacles[i].sprite.x() < -110) {
-                obstacles[i].sprite.set_x(100);  // Reset x position
-                obstacles[i].sprite.set_y(random.get_int(top_boundary, bottom_boundary));  // Set new y position
-            }
-
-            // Check for interaction with the car (collision detection)
-            bn::rect car_rect(int(linkin_kart.x()), int(linkin_kart.y()), linkin_kart.shape_size().width(), linkin_kart.shape_size().height());
-            bn::rect obstacle_rect(int(obstacles[i].sprite.x()), int(obstacles[i].sprite.y()), obstacles[i].sprite.shape_size().width(), obstacles[i].sprite.shape_size().height());
-
-            if (car_rect.intersects(obstacle_rect)) {
-                // Handle collision with the car
-                if (obstacles[i].type == GAS_CAN) {
-                    speed_up = true;
-                    speed_timer.restart();
-                    obstacles[i].sprite.set_visible(false);
-                } else if (obstacles[i].type == OIL_SPILL) {
-                    linkin_kart.set_x(linkin_kart.x() + 0.05);;  // Slow down the car when hitting oil spill
-                    obstacles[i].sprite.set_visible(false);
-                } else if (obstacles[i].type == NORMAL_OBSTACLE) {
-                    bn::sound_items::collision_new.play();
-                    game_over = true;  // End the game if the car hits a normal obstacle
-                }
-                /*
-                // Shift the remaining obstacles left in the array
-                for (int j = i; j < num_obstacles - 1; ++j) {
-                    obstacles[j] = obstacles[j + 1];
-                }
-                --num_obstacles;  // Decrease the number of obstacles
-                continue;  // Skip the rest of the loop and check the next obstacle
-                */
-            }
-        }
-
         backdrop_image.set_camera(camera);
         lap_out_loud.set_camera(camera);
         if (bn::keypad::a_held()) {
-            camera.set_x(camera.x() + 5);
+            camera.set_x(camera.x() + 2);
             if (linkin_kart.x() > 80) {
-                linkin_kart.set_x(80);
+                linkin_kart.set_x(30);
             } else {
-                linkin_kart.set_x(linkin_kart.x() + 0.1);
+                linkin_kart.set_x(linkin_kart.x() + 0.005);
             }
             if (bn::keypad::up_held()) {
                 if (linkin_kart.y() > top_boundary) {
                     linkin_kart.set_y(linkin_kart.y() - 1);
                 } else {
                     linkin_kart.set_y(30);
-                }
+                }    
             }
             if (bn::keypad::down_held()) {
                 if (linkin_kart.y() < bottom_boundary) {
                     linkin_kart.set_y(linkin_kart.y() + 1);
                 } else {
-                    linkin_kart.set_y(68);
+                    linkin_kart.set_y(66);
                 }
+            }
+
+            // Update ticks based on elapsed time
+            ticks += timer.elapsed_ticks_with_restart();
+
+            // Slow down the countdown timer by updating it every 60 frames
+            frame_counter++;
+            if (frame_counter >= 60) { // 60 frames = roughly 1 second
+                frame_counter = 0;
+                if (!game_over) {
+                    elapsed_time++;  // Increment elapsed time every second
+                }
+            }
+
+            // Convert countdown_seconds to minutes and seconds
+            int minutes = elapsed_time / 60;
+            int seconds_left = elapsed_time % 60;
+
+            // Update the countdown timer text display
+            bn::string<32> timer_text = "Current: " + bn::to_string<32>(minutes) + ":" + bn::to_string<32>(seconds_left) + " Best: " + bn::to_string<32>(best_time / 60) + ":" + bn::to_string<32>(best_time % 60);
+            text_sprites.clear();
+            text_generator.generate(-6 * 16, -68, timer_text, text_sprites);  // Position at the top-left corner
+
+            // If the game is over, display "Game Over" and stop the car's movement
+            if (game_over) {
+                if (elapsed_time > best_time) {
+                    best_time = elapsed_time;
+                    bn::sram::write(best_time);
+                }
+                bn::sprite_ptr explosion = bn::sprite_items::explosion.create_sprite(int(linkin_kart.x()), int(linkin_kart.y()));
+                elapsed_time = 0;
+                text_sprites.clear(); // Clear the vector, removing the references to old sprites
+                text_generator.generate(-30, -40, "Game Over", text_sprites);  // Display it below the timer
+                text_generator.generate(-58, 5, "Press A to restart", text_sprites);
+                text_generator.generate(-59, 20, "Press B to go back", text_sprites);
+
+                explosion.set_visible(true);
+                bn::core::update();
+                // Wait for 'A' to restart the game
+                while (!bn::keypad::a_pressed()) {
+                    bn::core::update();  // Wait for user input
+                }
+                // Reset the game
+                game_over = false;
+                elapsed_time = 0;
+                num_obstacles = 0;
+                for (int i = 0; i < max_obstacles; ++i) {
+                    obstacles[i].sprite.set_visible(false);  // Hide obstacles
+                }
+                backdrop_image.set_position(0, 0);
+                lap_out_loud.set_position(-622, 0);
+                backdrop_image.set_camera(camera);
+                lap_out_loud.set_camera(camera);
+                linkin_kart.set_position(-100, 40);
+                timer.restart();
+                bn::core::update();
+                continue;  // Skip the rest of the loop
+            }
+
+            // Update car speed based on active powerups
+            if (speed_up && speed_timer.elapsed_ticks() < 5 * 60) {
+                linkin_kart.set_x(linkin_kart.x() + 0.1);  // Speed up for 5 seconds
+            } else {
+                speed_up = false;  // Reset speed up state after 5 seconds
+            }
+            if (slow_down && slow_timer.elapsed_ticks() < 5 * 60) {
+                linkin_kart.set_x(linkin_kart.x() - 0.05);
+            } else {
+                slow_down = false;
+            }
+
+            // Manage obstacle spawning
+            if (barrel_counter >= barrel_spawn_frequency && num_obstacles < max_obstacles) {
+                barrel_counter = 0;
+                int x_position = 100;  // Starting position on the right side
+                int y_position = random.get_int(top_boundary, bottom_boundary);  // Random y position
+
+                // Check for overlap with existing obstacles before creating a barrel
+                bool overlap = false;
+                for (int i = 0; i < num_obstacles; ++i) {
+                    if (obstacles[i].sprite.x() == x_position && obstacles[i].sprite.y() == y_position) {
+                        overlap = true;
+                        break;
+                    }
+                }
+
+                if (!overlap) {
+                    obstacles[num_obstacles] = Obstacle(bn::sprite_items::barrel.create_sprite(x_position, y_position), NORMAL_OBSTACLE);
+                    num_obstacles++;
+                }
+            }
+
+            if (gas_counter >= gas_spawn_frequency && num_obstacles < max_obstacles) {
+                gas_counter = 0;
+                int x_position = 100;  // Starting position on the right side
+                int y_position = random.get_int(top_boundary, bottom_boundary);  // Random y position
+
+                obstacles[num_obstacles] = Obstacle(bn::sprite_items::gas.create_sprite(x_position, y_position), GAS_CAN);
+                num_obstacles++;
+            }
+
+            if (oil_counter >= oil_spawn_frequency && num_obstacles < max_obstacles) {
+                oil_counter = 0;
+                int x_position = 100;  // Starting position on the right side
+                int y_position = random.get_int(top_boundary, bottom_boundary);  // Random y position
+
+                obstacles[num_obstacles] = Obstacle(bn::sprite_items::oil_spill.create_sprite(x_position, y_position), OIL_SPILL);
+                    num_obstacles++;
+            }
+
+            // Increment the counters for the obstacle spawn frequency
+            barrel_counter++;
+            gas_counter++;
+            oil_counter++;
+
+            // Move and check obstacles
+            for (int i = 0; i < num_obstacles; ++i) {
+                // Move obstacles left, independent of car's position
+                obstacles[i].sprite.set_x(obstacles[i].sprite.x() - 1);  // Move the obstacle left
+
+                // If the obstacle goes off-screen to the left, reset it to the right
+                if (obstacles[i].sprite.x() < -110) {
+                    obstacles[i].sprite.set_x(100);  // Reset x position
+                    obstacles[i].sprite.set_y(random.get_int(top_boundary, bottom_boundary));  // Set new y position
+                }
+
+                // Check for interaction with the car (collision detection)
+                bn::rect car_rect(int(linkin_kart.x()), int(linkin_kart.y()), 16, 16);
+                bn::rect obstacle_rect(int(obstacles[i].sprite.x()), int(obstacles[i].sprite.y()), 8, 4);
+
+                if (car_rect.intersects(obstacle_rect)) {
+                    // Handle collision with the car
+                    if (obstacles[i].type == GAS_CAN) {
+                        speed_up = true;
+                        speed_timer.restart();
+                        bn::sound_items::gas_collision.play();
+                        obstacles[i].sprite.set_visible(false);
+                    } else if (obstacles[i].type == OIL_SPILL) {
+                        slow_down = true;  // Slow down the car when hitting oil spill
+                        slow_timer.restart();
+                        bn::sound_items::off_road_sound.play();
+                        obstacles[i].sprite.set_visible(false);
+                    } else if (obstacles[i].type == NORMAL_OBSTACLE) {
+                        bn::sound_items::collision_new.play();
+                        game_over = true;  // End the game if the car hits a normal obstacle
+                    }
+                }
+
             }
         }
     }
