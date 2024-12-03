@@ -7,13 +7,11 @@
 
 // Backgrounds
 #include "bn_regular_bg_items_blue_bg.h"
-#include "bn_regular_bg_items_lvlslct_bg.h"
 #include "bn_regular_bg_items_instructions_bg.h"
 
 // Sprites
 #include "bn_sprite_items_start_button.h"
 #include "bn_sprite_items_how_to_play_button.h"
-#include "bn_sprite_items_level_1_button.h"
 #include "bn_sprite_items_back_button.h"
 #include "bn_sprite_items_cursor.h"
 
@@ -21,7 +19,6 @@
 enum class ScreenState
 {
     START,
-    LEVEL_SELECT,
     INSTRUCTIONS
 };
 
@@ -67,7 +64,7 @@ void update_start_screen(ScreenState& current_state)
         cursor.set_position(-40, 52);
     }
 
-    // Handle 'A' button press
+    // Handle 'A' button press for navigation
     if (bn::keypad::a_pressed())
     {
         start_button.set_visible(false);
@@ -76,49 +73,12 @@ void update_start_screen(ScreenState& current_state)
 
         if (cursor.y() == 52) // Start button selected
         {
-            current_state = ScreenState::LEVEL_SELECT;
+            // You could replace this with the transition to your game's main screen if applicable.
+            current_state = ScreenState::START; 
         }
         else if (cursor.y() == 65) // How to Play button selected
         {
             current_state = ScreenState::INSTRUCTIONS;
-        }
-    }
-}
-
-// Function to update the Level Select screen
-void update_level_select_screen(ScreenState& current_state)
-{
-    load_background(bn::regular_bg_items::lvlslct_bg, ScreenState::LEVEL_SELECT);
-
-    // Sprites for the Level Select screen
-    static bn::sprite_ptr level_1_button = bn::sprite_items::level_1_button.create_sprite(0, 0);
-    static bn::sprite_ptr back_button = bn::sprite_items::back_button.create_sprite(0, 40);
-    static bn::sprite_ptr cursor = bn::sprite_items::cursor.create_sprite(-40, 0);
-
-    level_1_button.set_visible(true);
-    back_button.set_visible(true);
-    cursor.set_visible(true);
-
-    // Move the cursor between buttons
-    if (bn::keypad::down_pressed() && cursor.y() == 0)
-    {
-        cursor.set_position(-40, 40);
-    }
-    else if (bn::keypad::up_pressed() && cursor.y() == 40)
-    {
-        cursor.set_position(-40, 0);
-    }
-
-    // Handle 'A' button press
-    if (bn::keypad::a_pressed())
-    {
-        level_1_button.set_visible(false);
-        back_button.set_visible(false);
-        cursor.set_visible(false);
-
-        if (cursor.y() == 40) // Back button selected
-        {
-            current_state = ScreenState::START;
         }
     }
 }
@@ -129,14 +89,14 @@ void update_instructions_screen(ScreenState& current_state)
     load_background(bn::regular_bg_items::instructions_bg, ScreenState::INSTRUCTIONS);
 
     // Sprites for the Instructions screen
-    static bn::sprite_ptr back_button = bn::sprite_items::back_button.create_sprite(0, 40);
-    static bn::sprite_ptr cursor = bn::sprite_items::cursor.create_sprite(-40, 40);
+    static bn::sprite_ptr back_button = bn::sprite_items::back_button.create_sprite(0, 65);
+    static bn::sprite_ptr cursor = bn::sprite_items::cursor.create_sprite(-40, 65);
 
     back_button.set_visible(true);
     cursor.set_visible(true);
 
-    // Handle 'A' button press
-    if (bn::keypad::a_pressed() && cursor.y() == 40) // Back button selected
+    // Handle 'B' button press for navigation
+    if (bn::keypad::b_pressed() && cursor.y() == 65) // Back button selected
     {
         back_button.set_visible(false);
         cursor.set_visible(false);
@@ -159,9 +119,6 @@ int main()
         case ScreenState::START:
             update_start_screen(current_state);
             break;
-        case ScreenState::LEVEL_SELECT:
-            update_level_select_screen(current_state);
-            break;
         case ScreenState::INSTRUCTIONS:
             update_instructions_screen(current_state);
             break;
@@ -174,4 +131,3 @@ int main()
         bn::core::update();
     }
 }
-
