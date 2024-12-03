@@ -4,7 +4,7 @@
 #include "bn_sprite_ptr.h"
 #include "bn_regular_bg_ptr.h"
 #include "bn_optional.h"
-#include "bn_music_actions.h"
+#include "bn_music.h"
 #include "bn_music_items.h"
 
 // Backgrounds
@@ -50,6 +50,7 @@ void update_start_screen(ScreenState& current_state)
     if (!bn::music::playing()) 
     {
         bn::music_items::how_to_play.play();
+        bn::music::set_volume(0.8);
     }
 
     // Sprites for the Start screen
@@ -98,6 +99,7 @@ void update_instructions_screen(ScreenState& current_state)
     if (!bn::music::playing()) 
     {
         bn::music_items::how_to_play.play();
+        bn::music::set_volume(0.8);
     }
     
     // Sprites for the Instructions screen
