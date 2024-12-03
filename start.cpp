@@ -4,6 +4,8 @@
 #include "bn_sprite_ptr.h"
 #include "bn_regular_bg_ptr.h"
 #include "bn_optional.h"
+#include "bn_music_actions.h"
+#include "bn_music_items.h"
 
 // Backgrounds
 #include "bn_regular_bg_items_blue_bg.h"
@@ -44,6 +46,11 @@ void load_background(const bn::regular_bg_item& bg_item, ScreenState new_screen)
 void update_start_screen(ScreenState& current_state)
 {
     load_background(bn::regular_bg_items::blue_bg, ScreenState::START);
+
+    if (!bn::music::playing()) 
+    {
+        bn::music_items::how_to_play.play();
+    }
 
     // Sprites for the Start screen
     static bn::sprite_ptr start_button = bn::sprite_items::start_button.create_sprite(0, 52);
@@ -88,6 +95,11 @@ void update_instructions_screen(ScreenState& current_state)
 {
     load_background(bn::regular_bg_items::instructions_bg, ScreenState::INSTRUCTIONS);
 
+    if (!bn::music::playing()) 
+    {
+        bn::music_items::how_to_play.play();
+    }
+    
     // Sprites for the Instructions screen
     static bn::sprite_ptr back_button = bn::sprite_items::back_button.create_sprite(0, 65);
     static bn::sprite_ptr cursor = bn::sprite_items::cursor.create_sprite(-40, 65);
